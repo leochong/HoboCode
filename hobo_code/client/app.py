@@ -246,42 +246,55 @@ class HoboApp(App):
         await self.process_assistant_response(message)
 
     async def process_assistant_response(self, user_message: str) -> None:
-        """Process user message and generate assistant response."""
+        """Process user message and generate assistant response via ACP server."""
+        import asyncio
+        import json
+
         message_list = self.query_one("#message-list", MessageList)
 
-        system_prompt = ""
-        if self.active_skill:
-            registry = SkillRegistry()
-            skill = registry.get_skill(self.active_skill)
-            if skill:
-                if hasattr(skill, "full_content"):
-                    system_prompt = skill.full_content[:200] + "..."
-                else:
-                    system_prompt = skill.system_prompt[:200] + "..."
+        try:
+            reader, writer = await asyncio.open_connection("127.0.0.1", 8765)
+
+            request = {
+                "type": "request",
+                "version": "1.0",
+                "payload": {
+                    "request_id": "req-1",
+                    "method": "completion",
+                    "params": {
+                        "message": user_message,
+                        "skill": self.active_skill,
+                    },
+                    "context": {},
+                },
+            }
+
+            writer.write(json.dumps(request).encode())
+            await writer.drain()
+
+            response_data = await reader.read(65536)
+            writer.close()
+            await writer.wait_closed()
+
+            response = json.loads(response_data.decode())
+            payload = response.get("payload", {})
+            status = payload.get("status")
+
+            if status == "success":
+                assistant_response = payload.get("result", {}).get("response", "No response")
+            else:
+                assistant_response = f"Error: {payload.get('error', 'Unknown error')}"
+
+        except ConnectionRefusedError:
+            assistant_response = "Error: Could not connect to ACP server. Make sure the server is running with 'hobo --server'"
+        except Exception as e:
+            assistant_response = f"Error: {str(e)}"
 
         mode_indicator = "[Auto] " if self.auto_mode else ""
+        assistant_response = (
+            f"{assistant_response}\n\n{mode_indicator}(Skill: {self.active_skill or 'none'})"
+        )
 
-        assistant_response = f"""I received: {user_message}
-
-{mode_indicator}(Skill active: {self.active_skill or "none"})
-
-**To get real AI responses:**
-
-1. Start the ACP server in a separate terminal:
-   ```
-   hobo serve
-   ```
-
-2. Then open a new terminal and run:
-   ```
-   hobo chat
-   ```
-
-**Or configure an API key and use direct mode:**
-   ```
-   hobo auth
-   ```
-"""
         message_list.add_message("assistant", assistant_response)
 
         if self.current_session:
