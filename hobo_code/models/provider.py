@@ -62,10 +62,9 @@ class ModelProvider:
             "deepseek": ["deepseek-chat"],
             "mistral": ["mistral-large-latest", "mistral-small-latest"],
             "openrouter": [
-                "openrouter/auto",
-                "openrouter/google/gemini-pro",
-                "openrouter/anthropic/claude-3-opus",
-                "openrouter/meta-llama/llama-3-70b",
+                "openrouter/meta-llama/llama-3-8b-instruct",
+                "openrouter/mistral/mistral-7b-instruct",
+                "openrouter/cognitivecomputations/dolphin-mixtral-8x7b",
             ],
         }
         return provider_models.get(provider, self._get_default_models(provider))
