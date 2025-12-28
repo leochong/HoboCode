@@ -469,6 +469,182 @@ def issue_view(issue_number: int) -> None:
     click.echo(f"Labels: {', '.join(issue.get('labels', []))}")
 
 
+@cli.group()
+def export() -> None:
+    """Export session data for SFT training."""
+    pass
+
+
+@export.command("session")
+@click.argument("session_id", type=str)
+@click.option("--output", "-o", type=str, default="export.jsonl", help="Output file path")
+@click.option("--skill", type=str, default=None, help="Skill name to include")
+def export_session(session_id: str, output: str, skill: str | None) -> None:
+    """Export a single session as JSONL training data."""
+    from hobo_code.session.manager import SessionManager
+    from hobo_code.export.formatter import JSONLFormatter
+    from hobo_code.skills.registry import SkillRegistry
+
+    manager = SessionManager()
+    session = manager.get_session(session_id)
+
+    if not session:
+        click.echo(f"Session {session_id} not found.")
+        return
+
+    registry = SkillRegistry()
+    system_prompt = registry.get_system_prompt(skill)
+
+    formatter = JSONLFormatter()
+    lines = formatter.format_session(session, system_prompt, skill)
+
+    count = formatter.export_to_file(lines, output)
+    click.echo(f"Exported {count} training examples to {output}")
+
+
+@export.command("all")
+@click.option("--output", "-o", type=str, default="all_sessions.jsonl", help="Output file path")
+def export_all(output: str) -> None:
+    """Export all sessions as JSONL training data."""
+    from hobo_code.session.manager import SessionManager
+    from hobo_code.export.formatter import JSONLFormatter
+    from hobo_code.skills.registry import SkillRegistry
+
+    manager = SessionManager()
+    sessions = manager.list_sessions()
+
+    if not sessions:
+        click.echo("No sessions found.")
+        return
+
+    registry = SkillRegistry()
+    formatter = JSONLFormatter()
+    all_lines = []
+
+    for session in sessions:
+        skill = session.model
+        system_prompt = registry.get_system_prompt(skill)
+        lines = formatter.format_session(session, system_prompt, skill)
+        all_lines.extend(lines)
+
+    count = formatter.export_to_file(all_lines, output)
+    click.echo(f"Exported {count} training examples from {len(sessions)} sessions to {output}")
+
+
+@export.command("stats")
+def export_stats() -> None:
+    """Show export statistics."""
+    from hobo_code.session.manager import SessionManager
+    from hobo_code.export.formatter import JSONLFormatter
+
+    manager = SessionManager()
+    sessions = manager.list_sessions()
+
+    if not sessions:
+        click.echo("No sessions found.")
+        return
+
+    formatter = JSONLFormatter()
+    all_lines = []
+    for session in sessions:
+        lines = formatter.format_session(session, "You are a coding assistant.", None)
+        all_lines.extend(lines)
+
+    stats = formatter.get_stats(all_lines)
+
+    click.echo("Export Statistics")
+    click.echo("-" * 40)
+    click.echo(f"Total training examples: {stats['total_examples']}")
+    click.echo(f"Success rate: {stats['success_rate']*100:.1f}%")
+    click.echo(f"Avg input tokens: {stats['avg_tokens_input']}")
+    click.echo(f"Avg output tokens: {stats['avg_tokens_output']}")
+    click.echo(f"Task types: {', '.join(stats['task_types'].keys())}")
+    click.echo(f"Skills used: {', '.join(stats['skills_used'])}")
+
+
+@export.command("dry-run")
+@click.option("--sample", type=int, default=10, help="Number of samples to preview")
+def export_dry_run(sample: int) -> None:
+    """Preview export without saving."""
+    from hobo_code.session.manager import SessionManager
+    from hobo_code.export.formatter import JSONLFormatter
+
+    manager = SessionManager()
+    sessions = manager.list_sessions()
+
+    if not sessions:
+        click.echo("No sessions found.")
+        return
+
+    formatter = JSONLFormatter()
+    all_lines = []
+    for session in sessions[:sample]:
+        lines = formatter.format_session(session, "You are a coding assistant.", None)
+        all_lines.extend(lines)
+
+    click.echo(f"Preview ({min(sample, len(all_lines))} examples):")
+    for i, line in enumerate(all_lines[:sample]):
+        import json
+        data = json.loads(line)
+        click.echo(f"\n--- Example {i+1} ---")
+        click.echo(f"Task: {data.get('task', 'unknown')}")
+        click.echo(f"Skill: {data.get('skill', 'none')}")
+        click.echo(f"Messages: {len(data.get('messages', []))}")
+        click.echo(f"Success: {data.get('success', True)}")
+
+
+@export.command("sample")
+@click.option("--output", "-o", type=str, default="data/sample_export.jsonl", help="Output file path")
+def export_sample(output: str) -> None:
+    """Create a sample JSONL export file."""
+    from hobo_code.export.formatter import JSONLFormatter
+
+    formatter = JSONLFormatter()
+    count = formatter.create_sample_export(output)
+    click.echo(f"Created sample export with {count} examples at {output}")
+
+
+@cli.command("donate")
+@click.option("--dataset", "-d", type=str, required=True, help="Dataset name on HF")
+@click.option("--private", is_flag=True, help="Make dataset private")
+@click.option("--token", type=str, help="HF token (or use HF_TOKEN env var)")
+def donate(dataset: str, private: bool, token: str | None) -> None:
+    """Donate training data to HuggingFace datasets."""
+    from hobo_code.session.manager import SessionManager
+    from hobo_code.export.formatter import JSONLFormatter
+    from hobo_code.export.huggingface import HuggingFaceExporter
+
+    manager = SessionManager()
+    sessions = manager.list_sessions()
+
+    if not sessions:
+        click.echo("No sessions found to donate.")
+        return
+
+    formatter = JSONLFormatter()
+    all_lines = []
+    for session in sessions:
+        lines = formatter.format_session(session, "You are a coding assistant.", None)
+        all_lines.extend(lines)
+
+    if not all_lines:
+        click.echo("No training examples found.")
+        return
+
+    exporter = HuggingFaceExporter(token=token)
+    result = exporter.export_with_metadata(
+        all_lines,
+        dataset_name=dataset,
+        description=f"Hobo Code training data - {len(all_lines)} examples",
+        private=private,
+    )
+
+    if result.get("success"):
+        click.echo(f"Successfully pushed to {result['url']}")
+    else:
+        click.echo(f"Failed to push: {result.get('error')}")
+
+
 def main():
     """Entry point for the CLI."""
     cli()
