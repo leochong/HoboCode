@@ -32,15 +32,18 @@ def _start_embedded_server(
     server = ACPServer(host=host, port=port)
     _embedded_server_instance = server
 
-    async def run_server():
-        await server.start()
+    def run_server():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
-            while True:
-                await asyncio.sleep(1)
-        except KeyboardInterrupt:
-            await server.stop()
+            loop.run_until_complete(server.start())
+            loop.run_forever()
+        except Exception as e:
+            print(f"Server error: {e}")
+        finally:
+            loop.close()
 
-    thread = threading.Thread(target=lambda: asyncio.run(run_server()), daemon=True)
+    thread = threading.Thread(target=run_server, daemon=True)
     thread.start()
     time.sleep(0.5)
     return thread, port
