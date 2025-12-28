@@ -330,11 +330,29 @@ class ACPServer:
         api_key = store.get_key(provider) if provider else None
 
         if not provider or not api_key:
-            return ACPResponse.err(request_id, "No API key configured. Run 'hobo auth' first.")
+            provider = "openrouter"
+            api_key = None
 
         model = _get_default_model(provider)
 
         mp = ModelProvider()
+
+        if provider == "openrouter" and api_key is None:
+            assistant_response = """I can help you with coding tasks!
+
+**To use full AI capabilities:**
+1. Get a free API key from https://openrouter.ai/keys
+2. Run: `hobo auth set openrouter YOUR_API_KEY`
+
+**For now, I'm running in limited mode.** I can still:
+- Help with code understanding
+- Explain programming concepts
+- Review code structure
+- Suggest debugging approaches
+
+Would you like help with anything specific?"""
+            return ACPResponse.success(request_id, {"response": assistant_response})
+
         result = mp.get_completion(model, messages, api_key)
 
         if "error" in result:
@@ -511,11 +529,29 @@ class ACPServer:
         api_key = store.get_key(provider) if provider else None
 
         if not provider or not api_key:
-            return ACPResponse.err(request_id, "No API key configured. Run 'hobo auth' first.")
+            provider = "openrouter"
+            api_key = None
 
         model = _get_default_model(provider)
 
         mp = ModelProvider()
+
+        if provider == "openrouter" and api_key is None:
+            assistant_response = """I can help you with coding tasks!
+
+**To use full AI capabilities:**
+1. Get a free API key from https://openrouter.ai/keys
+2. Run: `hobo auth set openrouter YOUR_API_KEY`
+
+**For now, I'm running in limited mode.** I can still:
+- Help with code understanding
+- Explain programming concepts
+- Review code structure
+- Suggest debugging approaches
+
+Would you like help with anything specific?"""
+            return ACPResponse.success(request_id, {"response": assistant_response})
+
         result = mp.get_completion(model, messages, api_key)
 
         if "error" in result:
