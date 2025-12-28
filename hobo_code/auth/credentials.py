@@ -96,6 +96,11 @@ class CredentialStore:
         """Check if any credentials are stored."""
         return bool(self._load_credentials())
 
+    def get_provider(self) -> str | None:
+        """Get the first configured provider."""
+        credentials = self._load_credentials()
+        return next(iter(credentials.keys()), None) if credentials else None
+
     def clear_all(self) -> None:
         """Clear all credentials."""
         if self.credentials_file.exists():

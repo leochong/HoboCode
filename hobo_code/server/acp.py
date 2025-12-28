@@ -250,6 +250,7 @@ class ACPServer:
         handlers = {
             "ping": self._handle_ping,
             "echo": self._handle_echo,
+            "completion": self._handle_completion,
             "skills.list": self._handle_skills_list,
             "skills.get": self._handle_skills_get,
             "skills.search": self._handle_skills_search,
@@ -282,6 +283,51 @@ class ACPServer:
     ) -> ACPResponse:
         return ACPResponse.success(request_id, {"echo": params.get("message", "")})
 
+    async def _handle_completion(
+        self,
+        request_id: str,
+        params: dict[str, Any],
+        session_id: str,
+    ) -> ACPResponse:
+        from hobo_code.auth.credentials import CredentialStore
+        from hobo_code.skills.registry import SkillRegistry
+        from hobo_code.models.provider import ModelProvider
+
+        message = params.get("message")
+        skill_name = params.get("skill")
+
+        if not message:
+            return ACPResponse.err(request_id, "message is required")
+
+        registry = SkillRegistry()
+        skill = registry.get_skill(skill_name) if skill_name else None
+        system_prompt = skill.system_prompt if skill else "You are a helpful coding assistant."
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": message},
+        ]
+
+        store = CredentialStore()
+        provider = store.get_provider()
+        api_key = store.get_key(provider) if provider else None
+
+        if not provider or not api_key:
+            return ACPResponse.err(request_id, "No API key configured. Run 'hobo auth' first.")
+
+        model = f"{provider}/default"
+        if provider == "openrouter":
+            model = "openrouter/meta-llama/llama-3-8b-instruct"
+
+        mp = ModelProvider()
+        result = mp.get_completion(model, messages, api_key)
+
+        if "error" in result:
+            return ACPResponse.err(request_id, result["error"])
+
+        content = result["choices"][0]["message"]["content"]
+        return ACPResponse.success(request_id, {"response": content})
+
     async def _handle_skills_list(
         self,
         request_id: str,
@@ -296,11 +342,13 @@ class ACPServer:
         for s in skills:
             skill = registry.get_skill(s)
             if skill:
-                skill_list.append({
-                    "name": skill.name,
-                    "description": skill.description,
-                    "keywords": skill.keywords,
-                })
+                skill_list.append(
+                    {
+                        "name": skill.name,
+                        "description": skill.description,
+                        "keywords": skill.keywords,
+                    }
+                )
         return ACPResponse.success(request_id, {"skills": skill_list})
 
     async def _handle_skills_get(
@@ -396,17 +444,17 @@ class ACPServer:
         from hobo_code.session.manager import SessionManager
         from hobo_code.skills.registry import SkillRegistry
 
-        title = params.get("title", "New Session")
+        title = params.get("title", "New Chat")
         skill = params.get("skill")
 
         registry = SkillRegistry()
-        system_prompt = registry.get_system_prompt(skill)
+        system_prompt = registry.get_system_prompt(skill) if skill else None
 
         manager = SessionManager()
         session = manager.create_session(
             title=title,
-            system_prompt=system_prompt,
-            model=skill,
+            system_prompt=system_prompt or "",
+            model=skill or None,
         )
 
         return ACPResponse.success(request_id, {"session_id": session.id})
@@ -419,6 +467,8 @@ class ACPServer:
     ) -> ACPResponse:
         from hobo_code.session.manager import SessionManager
         from hobo_code.skills.registry import SkillRegistry
+        from hobo_code.auth.credentials import CredentialStore
+        from hobo_code.models.provider import ModelProvider
 
         session_id_param = params.get("session_id")
         message = params.get("message")
@@ -433,12 +483,13 @@ class ACPServer:
             return ACPResponse.err(request_id, "Session not found")
 
         registry = SkillRegistry()
-        skill = registry.get_skill(session.model)
-        system_prompt = registry.get_system_prompt(session.model) if skill else None
+        skill = registry.get_skill(session.model) if session.model else None
+        system_prompt = skill.system_prompt if skill else "You are a helpful coding assistant."
 
-        response = manager.add_message(session_id_param, message, system_prompt)
+        manager.add_message(session_id_param, "user", message)
+        manager.add_message(session_id_param, "assistant", assistant_content)
 
-        return ACPResponse.success(request_id, {"response": response})
+        return ACPResponse.success(request_id, {"response": assistant_content})
 
     async def _handle_session_history(
         self,
@@ -458,14 +509,17 @@ class ACPServer:
         if not session:
             return ACPResponse.err(request_id, "Session not found")
 
-        return ACPResponse.success(request_id, {
-            "session": {
-                "id": session.id,
-                "title": session.title,
-                "model": session.model,
-                "messages": len(session.messages),
-            }
-        })
+        return ACPResponse.success(
+            request_id,
+            {
+                "session": {
+                    "id": session.id,
+                    "title": session.title,
+                    "model": session.model,
+                    "messages": len(session.messages),
+                }
+            },
+        )
 
     def get_session_stats(self) -> dict[str, Any]:
         """Get server session statistics."""

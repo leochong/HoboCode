@@ -37,7 +37,12 @@ class Session:
             "id": self.id,
             "title": self.title,
             "messages": [
-                {"role": m.role, "content": m.content, "timestamp": m.timestamp, "metadata": m.metadata}
+                {
+                    "role": m.role,
+                    "content": m.content,
+                    "timestamp": m.timestamp,
+                    "metadata": m.metadata,
+                }
                 for m in self.messages
             ],
             "created_at": self.created_at,
@@ -51,7 +56,12 @@ class Session:
     def from_dict(cls, data: dict[str, Any]) -> "Session":
         """Create session from dictionary."""
         messages = [
-            Message(role=m["role"], content=m["content"], timestamp=m.get("timestamp", ""), metadata=m.get("metadata", {}))
+            Message(
+                role=m["role"],
+                content=m["content"],
+                timestamp=m.get("timestamp", ""),
+                metadata=m.get("metadata", {}),
+            )
             for m in data.get("messages", [])
         ]
         return cls(
@@ -104,11 +114,14 @@ class SessionManager:
         path = self.sessions_dir / f"{session.id}.json"
         path.write_text(json.dumps(session.to_dict(), indent=2), encoding="utf-8")
 
-    def create_session(self, title: str = "New Session") -> Session:
+    def create_session(
+        self, title: str = "New Chat", system_prompt: str = "", model: str | None = None
+    ) -> Session:
         """Create a new session."""
         session = Session(
             id=str(uuid.uuid4()),
             title=title,
+            model=model,
         )
         self.save_session(session)
         return session
@@ -136,7 +149,9 @@ class SessionManager:
         self.save_session(session)
         return session
 
-    def update_stats(self, session_id: str, token_count: int, cost_estimate: float) -> Session | None:
+    def update_stats(
+        self, session_id: str, token_count: int, cost_estimate: float
+    ) -> Session | None:
         """Update session statistics."""
         session = self.get_session(session_id)
         if session is None:
