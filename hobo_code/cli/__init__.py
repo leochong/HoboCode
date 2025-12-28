@@ -19,11 +19,18 @@ def _check_credentials() -> bool:
         return False
 
 
+_embedded_server_thread: threading.Thread | None = None
+_embedded_server_instance = None
+
+
 def _start_embedded_server(
     host: str = "127.0.0.1", port: int = 8765
 ) -> tuple[threading.Thread, int]:
     """Start the ACP server in a background thread and return (thread, port)."""
+    global _embedded_server_instance
+
     server = ACPServer(host=host, port=port)
+    _embedded_server_instance = server
 
     async def run_server():
         await server.start()
@@ -35,7 +42,7 @@ def _start_embedded_server(
 
     thread = threading.Thread(target=lambda: asyncio.run(run_server()), daemon=True)
     thread.start()
-    time.sleep(0.5)  # Give server time to start
+    time.sleep(0.5)
     return thread, port
 
 
