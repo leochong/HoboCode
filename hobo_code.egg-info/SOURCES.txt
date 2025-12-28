@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+hobo_code/__init__.py
+hobo_code.egg-info/PKG-INFO
+hobo_code.egg-info/SOURCES.txt
+hobo_code.egg-info/dependency_links.txt
+hobo_code.egg-info/entry_points.txt
+hobo_code.egg-info/requires.txt
+hobo_code.egg-info/top_level.txt
+hobo_code/cli/__init__.py
+hobo_code/server/__init__.py
+hobo_code/server/acp.py
+hobo_code/tools/__init__.py
+hobo_code/tools/file.py
+tests/test_acp.py
+tests/test_file_tool.py
