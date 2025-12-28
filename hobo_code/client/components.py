@@ -41,12 +41,17 @@ class MessageList(Static):
         self.messages: list[tuple[str, str]] = []
 
     def add_message(self, role: str, content: str) -> None:
-        """Add a message to the list (without auto-update)."""
+        """Add a message bubble to the list."""
         self.messages.append((role, content))
+        bubble = MessageBubble(content, role=role)
+        self.mount(bubble)
+        self.scroll_bottom = True
 
     def clear(self) -> None:
         """Clear all messages."""
         self.messages.clear()
+        for child in self.query(MessageBubble):
+            child.remove()
 
     def get_messages(self) -> list[tuple[str, str]]:
         """Get all messages."""
