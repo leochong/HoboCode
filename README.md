@@ -2,6 +2,34 @@
 
 An open-source, terminal-native AI coding assistant with a nomadic, client-server architecture based on the Agent Client Protocol (ACP).
 
+## What Makes Hobo Code Different
+
+### Open-SFT Pipeline: Build Your Own Coding AI
+
+**Hobo Code is the only AI coding assistant that exports conversation data for training your own models.**
+
+```bash
+# Export sessions as JSONL training data
+hobo-code export --format jsonl --push-to-hf
+
+# Each line captures the full reasoning trace:
+# {"system": "...", "messages": [{"role": "user", "content": "..."}], 
+#  "reasoning": "Let me analyze this step by step...", 
+#  "tool_calls": [...], "content": "The solution is..."}
+```
+
+**Training Data Features:**
+- **Chain of Thought Recording**: Captures reasoning steps before each tool use
+- **Tool Call Traces**: Every file read, search, and edit is logged
+- **Privacy-Filtered**: Automatic PII and secret detection/removal
+- **Hugging Face Integration**: Push curated datasets with one command
+- **SFT-Ready Format**: Each JSONL line is a complete training example
+
+This makes Hobo Code invaluable for:
+- Training domain-specific coding assistants
+- Researching agent reasoning patterns
+- Building fine-tuned models for your codebase
+
 ## Overview
 
 Hobo Code is designed to be lightweight and highly modular via a "Skills" system, allowing it to perform complex refactors and bug fixes across any codebase. It provides intelligent assistance directly from the terminal.
@@ -27,7 +55,7 @@ Agent Client Protocol (ACP) for seamless communication:
 - Message parsing and routing
 - Bidirectional communication
 
-## Skills System
+### Skills System
 
 Modular skill definitions enable specialized agent personas:
 
@@ -53,7 +81,7 @@ Each skill is a JSON file containing:
 2. **TUI & Session Management**: Textual interface, session persistence, stats
 3. **Identity & Model Management**: Auth, model provider sync, modular skills
 4. **GitHub Integration & Workflow**: PR logic, repository management
-5. **Open SFT Pipeline**: Data export, privacy filtering, HF integration
+5. **Open SFT Pipeline**: JSONL data export with Chain of Thought, privacy filtering, HF integration
 
 ## Getting Started
 
@@ -81,13 +109,22 @@ hobo_code/
 ├── server/          # ACP server, agent loop, tools
 ├── client/          # Textual TUI implementation
 ├── tools/           # Tool implementations
-└── skills/          # JSON skill definitions
+├── github/          # GitHub integration (PR, issues, repo management)
+├── auth/            # Encrypted credential storage
+├── models/          # Model provider management
+├── skills/          # JSON skill definitions
+└── session/         # Session persistence and export
 
 tests/
 ├── conftest.py
-├── server/
-├── client/
-└── tools/
+├── test_acp.py
+├── test_client.py
+├── test_file_tool.py
+├── test_session.py
+├── test_auth.py
+├── test_models.py
+├── test_github.py
+└── test_pr.py
 ```
 
 ## Documentation

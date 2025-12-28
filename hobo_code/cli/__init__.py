@@ -259,6 +259,216 @@ def skills_recommend(task: str) -> None:
         click.echo(f"  - {skill.name}: {score:.2f}")
 
 
+@cli.group()
+def github() -> None:
+    """Manage GitHub repositories."""
+    pass
+
+
+@github.command("clone")
+@click.argument("repo_url", type=str)
+@click.argument("path", type=str, required=False)
+def github_clone(repo_url: str, path: str | None) -> None:
+    """Clone a repository."""
+    from hobo_code.github.client import GitHubClient
+
+    try:
+        client = GitHubClient()
+        target = client.clone(repo_url, path)
+        click.echo(f"Cloned to {target}")
+    except Exception as e:
+        click.echo(f"Error: {e}")
+
+
+@github.command("status")
+def github_status() -> None:
+    """Show repository status."""
+    from hobo_code.github.client import GitHubClient
+
+    client = GitHubClient()
+    info = client.get_repo_info()
+    status = client.status()
+
+    click.echo(f"Repository: {info.get('url', 'unknown')}")
+    click.echo(f"Branch: {info.get('branch', 'unknown')}")
+    click.echo(f"Commit: {info.get('commit', 'unknown')[:8]}")
+    click.echo(f"Working tree: {'clean' if status['clean'] else 'dirty'}")
+
+
+@github.command("branches")
+def github_branches() -> None:
+    """List branches."""
+    from hobo_code.github.client import GitHubClient
+
+    client = GitHubClient()
+    branches = client.list_branches()
+    current = client.current_branch()
+
+    click.echo("Branches:")
+    for b in branches:
+        prefix = "*" if b == current else " "
+        click.echo(f"  {prefix} {b}")
+
+
+@cli.group()
+def pr() -> None:
+    """Manage pull requests."""
+    pass
+
+
+@pr.command("list")
+@click.option("--state", default="open", type=click.Choice(["open", "closed", "all"]))
+def pr_list(state: str) -> None:
+    """List pull requests."""
+    from hobo_code.github.pr import PRManager
+
+    manager = PRManager()
+    prs = manager.list_prs(state)
+
+    if not prs:
+        click.echo("No PRs found.")
+        return
+
+    click.echo(f"Pull Requests ({state}):")
+    for pr in prs:
+        click.echo(f"  #{pr['number']} - {pr['title']} (@{pr['author']})")
+
+
+@pr.command("view")
+@click.argument("pr_number", type=int)
+def pr_view(pr_number: int) -> None:
+    """View a pull request."""
+    from hobo_code.github.pr import PRManager
+
+    manager = PRManager()
+    pr = manager.get_pr(pr_number)
+
+    if not pr:
+        click.echo(f"PR #{pr_number} not found.")
+        return
+
+    click.echo(f"#{pr['number']}: {pr['title']}")
+    click.echo(f"Author: {pr['author']}")
+    click.echo(f"State: {pr['state']}")
+    click.echo(f"URL: {pr['url']}")
+    click.echo(f"Files: {len(pr.get('files', []))}")
+
+
+@pr.command("checkout")
+@click.argument("pr_number", type=int)
+def pr_checkout(pr_number: int) -> None:
+    """Checkout a PR locally."""
+    from hobo_code.github.pr import PRManager
+
+    manager = PRManager()
+    if manager.checkout_pr(pr_number):
+        click.echo(f"Checked out PR #{pr_number}")
+    else:
+        click.echo(f"Failed to checkout PR #{pr_number}")
+
+
+@pr.command("diff")
+@click.argument("pr_number", type=int)
+def pr_diff(pr_number: int) -> None:
+    """Show PR diff."""
+    from hobo_code.github.pr import PRManager
+
+    manager = PRManager()
+    diff = manager.get_pr_diff(pr_number)
+
+    if diff:
+        click.echo(diff)
+    else:
+        click.echo("No diff available.")
+
+
+@pr.command("merge")
+@click.argument("pr_number", type=int)
+@click.option("--method", default="merge", type=click.Choice(["merge", "squash", "rebase"]))
+def pr_merge(pr_number: int, method: str) -> None:
+    """Merge a PR."""
+    from hobo_code.github.pr import PRManager
+
+    manager = PRManager()
+    if manager.merge_pr(pr_number, method):
+        click.echo(f"Merged PR #{pr_number}")
+    else:
+        click.echo(f"Failed to merge PR #{pr_number}")
+
+
+@cli.group()
+def issue() -> None:
+    """Manage issues."""
+    pass
+
+
+@issue.command("list")
+@click.option("--state", default="open", type=click.Choice(["open", "closed", "all"]))
+def issue_list(state: str) -> None:
+    """List issues."""
+    from hobo_code.github.issues import IssueManager
+
+    manager = IssueManager()
+    issues = manager.list_issues(state)
+
+    if not issues:
+        click.echo("No issues found.")
+        return
+
+    click.echo(f"Issues ({state}):")
+    for iss in issues:
+        click.echo(f"  #{iss['number']} - {iss['title']} (@{iss['author']})")
+
+
+@issue.command("create")
+@click.argument("title", type=str)
+@click.argument("body", type=str)
+@click.option("--label", multiple=True)
+def issue_create(title: str, body: str, label: tuple) -> None:
+    """Create an issue."""
+    from hobo_code.github.issues import IssueManager
+
+    manager = IssueManager()
+    result = manager.create_issue(title, body, list(label) if label else None)
+
+    if result:
+        click.echo(f"Created issue: {result['url']}")
+    else:
+        click.echo("Failed to create issue.")
+
+
+@issue.command("close")
+@click.argument("issue_number", type=int)
+def issue_close(issue_number: int) -> None:
+    """Close an issue."""
+    from hobo_code.github.issues import IssueManager
+
+    manager = IssueManager()
+    if manager.close_issue(issue_number):
+        click.echo(f"Closed issue #{issue_number}")
+    else:
+        click.echo(f"Failed to close issue #{issue_number}")
+
+
+@issue.command("view")
+@click.argument("issue_number", type=int)
+def issue_view(issue_number: int) -> None:
+    """View an issue."""
+    from hobo_code.github.issues import IssueManager
+
+    manager = IssueManager()
+    issue = manager.get_issue(issue_number)
+
+    if not issue:
+        click.echo(f"Issue #{issue_number} not found.")
+        return
+
+    click.echo(f"#{issue['number']}: {issue['title']}")
+    click.echo(f"Author: {issue['author']}")
+    click.echo(f"State: {issue['state']}")
+    click.echo(f"Labels: {', '.join(issue.get('labels', []))}")
+
+
 def main():
     """Entry point for the CLI."""
     cli()
