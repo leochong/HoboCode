@@ -33,6 +33,7 @@ class ModelProvider:
             "groq",
             "deepseek",
             "mistral",
+            "openrouter",
         ]
 
     def list_providers(self) -> list[str]:
@@ -51,11 +52,21 @@ class ModelProvider:
 
         provider_models = {
             "openai": ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
-            "anthropic": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
+            "anthropic": [
+                "claude-3-opus-20240229",
+                "claude-3-sonnet-20240229",
+                "claude-3-haiku-20240307",
+            ],
             "ollama": ["llama2", "codellama", "mistral", "phi"],
             "groq": ["llama2-70b-4096", "mixtral-8x7b-32768"],
             "deepseek": ["deepseek-chat"],
             "mistral": ["mistral-large-latest", "mistral-small-latest"],
+            "openrouter": [
+                "openrouter/auto",
+                "openrouter/google/gemini-pro",
+                "openrouter/anthropic/claude-3-opus",
+                "openrouter/meta-llama/llama-3-70b",
+            ],
         }
         return provider_models.get(provider, self._get_default_models(provider))
 
@@ -67,7 +78,9 @@ class ModelProvider:
         """Get information about a model."""
         base_model = model.split("/")[-1] if "/" in model else model
         full_model_key = model if "/" in model else ""
-        cost = self.COST_PER_1K_TOKENS.get(full_model_key) or self.COST_PER_1K_TOKENS.get(base_model, 0.001)
+        cost = self.COST_PER_1K_TOKENS.get(full_model_key) or self.COST_PER_1K_TOKENS.get(
+            base_model, 0.001
+        )
         provider = model.split("/")[0] if "/" in model else "unknown"
 
         return {
@@ -117,11 +130,15 @@ class ModelProvider:
         cost_per_1k = info["cost_per_1k_tokens"]
         return (input_tokens + output_tokens) / 1000 * cost_per_1k
 
-    def get_completion(self, model: str, messages: list[dict[str, str]], api_key: str | None = None) -> dict[str, Any]:
+    def get_completion(
+        self, model: str, messages: list[dict[str, str]], api_key: str | None = None
+    ) -> dict[str, Any]:
         """Get completion from a model (placeholder for actual API call)."""
         if not litellm:
             return {
-                "choices": [{"message": {"content": f"Response from {model} (LiteLLM not installed)"}}],
+                "choices": [
+                    {"message": {"content": f"Response from {model} (LiteLLM not installed)"}}
+                ],
                 "usage": {"prompt_tokens": 10, "completion_tokens": 20},
             }
         try:
