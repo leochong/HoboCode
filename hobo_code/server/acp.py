@@ -9,6 +9,19 @@ from enum import Enum
 from typing import Any
 
 
+def _get_default_model(provider: str) -> str:
+    """Get the default model for a provider."""
+    defaults = {
+        "openai": "gpt-3.5-turbo",
+        "anthropic": "claude-3-haiku-20240307",
+        "deepseek": "deepseek-chat",
+        "mistral": "mistral-small-latest",
+        "groq": "llama2-70b-4096",
+        "openrouter": "openrouter/meta-llama/llama-3-8b-instruct",
+    }
+    return defaults.get(provider, f"{provider}/model-1")
+
+
 class MessageType(str, Enum):
     """ACP message types."""
 
@@ -315,9 +328,7 @@ class ACPServer:
         if not provider or not api_key:
             return ACPResponse.err(request_id, "No API key configured. Run 'hobo auth' first.")
 
-        model = f"{provider}/default"
-        if provider == "openrouter":
-            model = "openrouter/meta-llama/llama-3-8b-instruct"
+        model = _get_default_model(provider)
 
         mp = ModelProvider()
         result = mp.get_completion(model, messages, api_key)
@@ -485,6 +496,28 @@ class ACPServer:
         registry = SkillRegistry()
         skill = registry.get_skill(session.model) if session.model else None
         system_prompt = skill.system_prompt if skill else "You are a helpful coding assistant."
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": message},
+        ]
+
+        store = CredentialStore()
+        provider = store.get_provider()
+        api_key = store.get_key(provider) if provider else None
+
+        if not provider or not api_key:
+            return ACPResponse.err(request_id, "No API key configured. Run 'hobo auth' first.")
+
+        model = _get_default_model(provider)
+
+        mp = ModelProvider()
+        result = mp.get_completion(model, messages, api_key)
+
+        if "error" in result:
+            return ACPResponse.err(request_id, result["error"])
+
+        assistant_content = result["choices"][0]["message"]["content"]
 
         manager.add_message(session_id_param, "user", message)
         manager.add_message(session_id_param, "assistant", assistant_content)
