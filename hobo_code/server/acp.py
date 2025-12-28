@@ -132,6 +132,10 @@ class ACPResponse:
             },
         )
 
+    def to_json(self) -> str:
+        """Serialize to JSON string."""
+        return json.dumps(self.to_message().to_dict())
+
     @classmethod
     def from_message(cls, message: ACPMessage) -> "ACPResponse":
         """Create from ACP message."""
