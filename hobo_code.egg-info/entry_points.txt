@@ -1,2 +1,0 @@
-[console_scripts]
-hobo-code = hobo_code.cli:main
