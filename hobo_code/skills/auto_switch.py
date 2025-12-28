@@ -14,7 +14,9 @@ class AutoSwitchConfig:
 
     DEFAULT_CONFIG = {
         "enabled": True,
-        "min_confidence": 0.7,
+        "use_llm": True,
+        "min_keyword_confidence": 0.7,
+        "min_llm_confidence": 0.6,
         "debounce_seconds": 3.0,
         "show_notifications": True,
         "notification_sound": True,
@@ -59,12 +61,28 @@ class AutoSwitchConfig:
         self.config["enabled"] = value
 
     @property
-    def min_confidence(self) -> float:
-        return self.config.get("min_confidence", 0.7)
+    def use_llm(self) -> bool:
+        return self.config.get("use_llm", True)
 
-    @min_confidence.setter
-    def min_confidence(self, value: float) -> None:
-        self.config["min_confidence"] = max(0.0, min(1.0, value))
+    @use_llm.setter
+    def use_llm(self, value: bool) -> None:
+        self.config["use_llm"] = value
+
+    @property
+    def min_keyword_confidence(self) -> float:
+        return self.config.get("min_keyword_confidence", 0.7)
+
+    @min_keyword_confidence.setter
+    def min_keyword_confidence(self, value: float) -> None:
+        self.config["min_keyword_confidence"] = max(0.0, min(1.0, value))
+
+    @property
+    def min_llm_confidence(self) -> float:
+        return self.config.get("min_llm_confidence", 0.6)
+
+    @min_llm_confidence.setter
+    def min_llm_confidence(self, value: float) -> None:
+        self.config["min_llm_confidence"] = max(0.0, min(1.0, value))
 
     @property
     def debounce_seconds(self) -> float:
@@ -158,7 +176,7 @@ class AutoSwitchManager:
     def should_auto_switch(
         self,
         current_skill: str | None,
-        new_skill: str,
+        new_skill: str | None,
         confidence: float,
     ) -> tuple[bool, str]:
         """Check if auto-switch should occur.
@@ -179,7 +197,7 @@ class AutoSwitchManager:
         if locked_skill and current_skill == locked_skill:
             return False, "skill_locked"
 
-        if confidence < self.config.min_confidence:
+        if confidence < self.config.min_keyword_confidence:
             return False, "below_threshold"
 
         if self._is_in_debounce():
@@ -225,6 +243,8 @@ class AutoSwitchManager:
     ) -> tuple[str | None, float, bool]:
         """Process a message and potentially auto-switch skills.
 
+        Uses both keyword detection and LLM classification for best results.
+
         Args:
             message: The user's message
             current_skill: Currently active skill
@@ -235,10 +255,7 @@ class AutoSwitchManager:
         if not self.config.enabled:
             return None, 0.0, False
 
-        detected_skill, confidence = detect_skill_from_message(
-            message,
-            threshold=self.config.min_confidence,
-        )
+        detected_skill, confidence, method = self._detect_skill_with_fallback(message)
 
         should_switch, reason = self.should_auto_switch(
             current_skill, detected_skill, confidence
@@ -251,7 +268,7 @@ class AutoSwitchManager:
                 previous_skill=current_skill,
                 new_skill=detected_skill,
                 confidence=confidence,
-                triggered_by="message",
+                triggered_by=f"message_{method}",
             )
             self._emit_switch_event(event)
 
@@ -259,11 +276,51 @@ class AutoSwitchManager:
 
         return detected_skill, confidence, False
 
+    def _detect_skill_with_fallback(
+        self,
+        message: str,
+    ) -> tuple[str | None, float, str]:
+        """Detect skill with keyword -> LLM fallback.
+
+        Returns:
+            Tuple of (skill, confidence, method)
+        """
+        from hobo_code.skills.detection import SkillDetectionEngine
+
+        detection_engine = SkillDetectionEngine()
+        keyword_skill, keyword_confidence = detection_engine.detect_skill(message)
+
+        if keyword_skill and keyword_confidence >= self.config.min_keyword_confidence:
+            return keyword_skill, keyword_confidence, "keyword"
+
+        if self.config.use_llm:
+            try:
+                from hobo_code.skills.classifier import SkillClassifier
+                classifier = SkillClassifier()
+                llm_result = classifier.classify_with_llm(message)
+
+                if llm_result:
+                    llm_skill = llm_result.get("recommended_skill")
+                    llm_confidence = llm_result.get("confidence", 0)
+
+                    if llm_skill and llm_confidence >= self.config.min_llm_confidence:
+                        return llm_skill, llm_confidence, "llm"
+
+                    if not keyword_skill or llm_confidence > keyword_confidence:
+                        return llm_skill, llm_confidence, "llm"
+            except Exception:
+                pass
+
+        if keyword_skill:
+            return keyword_skill, keyword_confidence, "keyword"
+
+        return None, 0.0, "none"
+
     def get_status(self) -> dict[str, Any]:
         """Get current auto-switch status."""
         return {
             "enabled": self.config.enabled,
-            "min_confidence": self.config.min_confidence,
+            "min_keyword_confidence": self.config.min_keyword_confidence,
             "debounce_seconds": self.config.debounce_seconds,
             "locked_skill": self.config.locked_skill,
             "in_debounce": self._is_in_debounce(),

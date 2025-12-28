@@ -455,6 +455,77 @@ def skills_info(skill_name: str) -> None:
         click.echo(f"Tools: {', '.join(skill.tools)}")
 
 
+@skills.command("classify")
+@click.argument("message", type=str)
+@click.option("--llm/--no-llm", default=True, help="Use LLM classification (default: yes)")
+def skills_classify(message: str, llm: bool) -> None:
+    """Classify a message and detect which skill to use.
+
+    Uses both keyword matching and LLM classification to suggest the best skill.
+    """
+    from hobo_code.skills.classifier import SkillClassifier
+    from hobo_code.skills.detection import SkillDetectionEngine
+
+    click.echo(f"Classifying: \"{message}\"")
+    click.echo("-" * 50)
+
+    if llm:
+        classifier = SkillClassifier()
+        result = classifier.classify(message, use_llm_fallback=True)
+
+        click.echo(f"Method: {result.get('method', 'unknown')}")
+        click.echo(f"Skill: {result.get('skill') or '(none)'}")
+        click.echo(f"Confidence: {result.get('confidence', 0):.2%}")
+
+        if result.get('intent'):
+            click.echo(f"Intent: {result['intent']}")
+        if result.get('reasoning'):
+            click.echo(f"Reasoning: {result['reasoning']}")
+    else:
+        engine = SkillDetectionEngine()
+        skill_name, confidence = engine.detect_skill(message)
+
+        click.echo("Method: keyword")
+        click.echo(f"Skill: {skill_name or '(none)'}")
+        click.echo(f"Confidence: {confidence:.2%}")
+
+
+@skills.command("detect")
+@click.argument("message", type=str)
+@click.option("--top", "-t", default=3, help="Show top N recommendations")
+def skills_detect(message: str, top: int) -> None:
+    """Get skill detection details for a message.
+
+    Shows how the detection engine analyzes your message and matches skills.
+    """
+    from hobo_code.skills.classifier import SkillClassifier
+    from hobo_code.skills.detection import SkillDetectionEngine
+
+    click.echo(f"Detecting skills for: \"{message}\"")
+    click.echo("=" * 50)
+
+    engine = SkillDetectionEngine()
+    recommendations = engine.detect_skills_ranked(message, top)
+
+    click.echo("\nKeyword Detection:")
+    if recommendations:
+        for skill, score in recommendations:
+            click.echo(f"  - {skill}: {score:.2%}")
+    else:
+        click.echo("  No matches found")
+
+    classifier = SkillClassifier()
+    llm_recommendations = classifier.get_recommendations(message, top)
+
+    click.echo("\nLLM Classification:")
+    if llm_recommendations:
+        for rec in llm_recommendations:
+            method = rec.get('method', 'unknown')
+            click.echo(f"  - {rec['skill']}: {rec['confidence']:.2%} ({method})")
+    else:
+        click.echo("  No LLM recommendations (API not configured)")
+
+
 @cli.group()
 def github() -> None:
     """Manage GitHub repositories."""
