@@ -227,12 +227,26 @@ class HoboApp(App):
 
     async def handle_regular_message(self, message: str) -> None:
         """Handle regular chat messages."""
+        import sys
+
+        print(
+            f"\n[DEBUG] handle_regular_message called with: {message}", file=sys.stderr, flush=True
+        )
+
         message_list = self.query_one("#message-list", MessageList)
+        print(f"[DEBUG] Got message_list widget", file=sys.stderr, flush=True)
+
         message_list.add_message("user", message)
+        print(f"[DEBUG] Added user message to list", file=sys.stderr, flush=True)
 
         detected_skill, confidence, did_switch = await self.auto_switch_manager.process_message(
             message,
             self.active_skill,
+        )
+        print(
+            f"[DEBUG] Skill detection: {detected_skill}, {confidence}, {did_switch}",
+            file=sys.stderr,
+            flush=True,
         )
 
         if did_switch and detected_skill:
