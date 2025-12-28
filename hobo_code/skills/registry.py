@@ -103,7 +103,7 @@ class AnthropicSkill(Skill):
 
     def _parse_frontmatter(self, content: str) -> dict[str, Any] | None:
         """Parse YAML frontmatter from skill content."""
-        match = re.match(r'^---\n(.*?)\n---\n', content, re.DOTALL)
+        match = re.match(r"^---\n(.*?)\n---\n", content, re.DOTALL)
         if match:
             try:
                 return yaml.safe_load(match.group(1))
@@ -117,10 +117,10 @@ class AnthropicSkill(Skill):
             return
 
         content = self._skill_path.read_text(encoding="utf-8")
-        match = re.match(r'^---\n.*?\n---\n(.*)$', content, re.DOTALL)
+        match = re.match(r"^---\n.*?\n---\n(.*)$", content, re.DOTALL)
         self._full_content = match.group(1) if match else content
 
-        link_pattern = r'\[link:\s*([^\]]+)\]'
+        link_pattern = r"\[link:\s*([^\]]+)\]"
         for link_match in re.finditer(link_pattern, content):
             link_name = link_match.group(1).strip()
             if self._skill_dir:
@@ -174,11 +174,16 @@ class AnthropicSkill(Skill):
 class SkillRegistry:
     """Registry for managing skills and personas."""
 
-    def __init__(self, skills_dir: str | None = None):
-        if skills_dir is None:
-            self.skills_dir = Path(__file__).parent.parent.parent / "skills"
+    def __init__(self, skills_dir: str | None = None, project_dir: str | None = None):
+        self.repo_skills_dir = Path(__file__).parent.parent.parent / "skills"
+
+        if project_dir:
+            self.project_dir = Path(project_dir)
+            self.skills_dir = self.project_dir / "skills"
         else:
-            self.skills_dir = Path(skills_dir)
+            self.project_dir = None
+            self.skills_dir = Path(skills_dir) if skills_dir else self.repo_skills_dir
+
         self._skills: dict[str, Skill] = {}
         self._anthropic_skills: dict[str, AnthropicSkill] = {}
         self._loaded = False
@@ -209,10 +214,18 @@ class SkillRegistry:
 
         self._loaded = True
 
+    def load_project_skills(self) -> None:
+        """Load skills from project directory, falling back to repo skills."""
+        if self.project_dir and self.skills_dir.exists():
+            self.load_skills()
+        elif self.repo_skills_dir.exists():
+            self.skills_dir = self.repo_skills_dir
+            self.load_skills()
+
     def list_skills(self) -> list[str]:
         """List all available skills."""
         if not self._loaded:
-            self.load_skills()
+            self.load_project_skills()
 
         json_skills = set(self._skills.keys())
         anthropic_skills = set(self._anthropic_skills.keys())
@@ -224,7 +237,7 @@ class SkillRegistry:
     def get_skill(self, name: str) -> Skill | None:
         """Get a skill by name."""
         if not self._loaded:
-            self.load_skills()
+            self.load_project_skills()
 
         if name in self._anthropic_skills:
             return self._anthropic_skills[name]
@@ -233,7 +246,7 @@ class SkillRegistry:
     def get_all_skills(self) -> list[Skill]:
         """Get all loaded skills."""
         if not self._loaded:
-            self.load_skills()
+            self.load_project_skills()
 
         all_skills = list(self._anthropic_skills.values()) + list(self._skills.values())
         return all_skills
@@ -241,7 +254,7 @@ class SkillRegistry:
     def get_recommended_skills(self, task: str) -> list[tuple[Skill, float]]:
         """Get skills recommended for a task."""
         if not self._loaded:
-            self.load_skills()
+            self.load_project_skills()
 
         scored = []
         for skill in self.get_all_skills():
@@ -280,7 +293,7 @@ class SkillRegistry:
     def get_skill_stats(self) -> dict[str, Any]:
         """Get statistics about loaded skills."""
         if not self._loaded:
-            self.load_skills()
+            self.load_project_skills()
 
         categories = {}
         for skill in self.get_all_skills():
@@ -299,14 +312,33 @@ class SkillRegistry:
     def is_anthropic_format(self, skill_name: str) -> bool:
         """Check if a skill is in Anthropic format."""
         if not self._loaded:
-            self.load_skills()
+            self.load_project_skills()
         return skill_name in self._anthropic_skills
 
     def get_skill_path(self, skill_name: str) -> Path | None:
         """Get the file path for a skill."""
         if not self._loaded:
-            self.load_skills()
+            self.load_project_skills()
 
         if skill_name in self._anthropic_skills:
             return self._anthropic_skills[skill_name]._skill_path
         return None
+
+    def add_skill(self, skill_path: Path) -> bool:
+        """Add a skill from a file path.
+
+        Args:
+            skill_path: Path to the SKILL.md file
+
+        Returns:
+            True if skill was added successfully
+        """
+        try:
+            if skill_path.is_file():
+                skill_name = skill_path.parent.name
+                anthropic_skill = AnthropicSkill(skill_name, skill_path)
+                self._anthropic_skills[skill_name] = anthropic_skill
+                return True
+        except Exception:
+            pass
+        return False
