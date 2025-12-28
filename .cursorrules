@@ -1,0 +1,168 @@
+# .cursorrules
+
+This file provides Cursor-specific guidance for working with Hobo Code.
+
+## Project Context
+
+Hobo Code is an open-source, terminal-native AI coding assistant using ACP (Agent Client Protocol) architecture with Python server and Textual TUI client.
+
+## General Behavior
+
+- Always read existing files before editing
+- Follow code style guidelines in AGENTS.md
+- Preserve existing functionality when refactoring
+- Add tests for new features
+- Never commit secrets or API keys
+
+## Commands
+
+### Testing
+```bash
+pytest                      # All tests
+pytest tests/test_file.py   # Single file
+pytest -m unit              # By marker
+pytest --cov=src            # With coverage
+```
+
+### Linting
+```bash
+make lint                   # All linters
+make format                 # Auto-format
+ruff check src/             # Check only
+```
+
+## Code Style
+
+### Type Hints (Required)
+```python
+def process(
+    message: str,
+    context: dict[str, str] | None = None,
+) -> list[dict[str, object]]:
+```
+
+### Imports
+```python
+# Correct: absolute imports
+from hobo_code.server import ACPServer
+
+# Order: stdlib → third-party → local
+import os
+from pathlib import Path
+
+import click
+from textual.app import App
+
+from hobo_code.tools import FileTool
+```
+
+### Naming
+| Type | Convention | Example |
+|------|------------|---------|
+| Modules | snake_case | `acp_server.py` |
+| Classes | PascalCase | `ACPServer` |
+| Functions | snake_case | `handle_message()` |
+| Variables | snake_case | `user_message` |
+| Constants | UPPER_SNAKE_CASE | `MAX_RETRIES` |
+
+### Error Handling
+```python
+# Correct
+try:
+    result = await self._execute_tool(tool)
+except FileNotFoundError as e:
+    logger.error(f"Tool not found: {tool.name}")
+    raise ToolExecutionError(...) from e
+
+# Incorrect - never use bare except
+try:
+    result = await self._execute_tool(tool)
+except:
+    pass
+```
+
+### Async/Await
+```python
+async def process_request(self, request: ACPRequest) -> ACPResponse:
+    try:
+        async with asyncio.timeout(30):
+            result = await self._process(request)
+        return ACPResponse.success(result)
+    except asyncio.TimeoutError:
+        return ACPResponse.error("Request timed out")
+```
+
+## Skills System
+
+Skills are in `skills/{category}/{skill_name}.json`:
+
+```json
+{
+  "name": "Skill Name",
+  "description": "What this skill does",
+  "system_prompt": "Behavioral instructions",
+  "when_to_use": ["When to activate this skill"],
+  "when_not_to_use": ["When not to activate"],
+  "examples": ["Usage examples"],
+  "guidelines": ["Behavioral guidelines"],
+  "keywords": ["discovery", "keywords"]
+}
+```
+
+### Categories
+- `language/` - Python, Rust, Go, JavaScript, etc.
+- `framework/` - FastAPI, React, Spring Boot, etc.
+- `task/` - Debugging, testing, refactoring, code review
+- `devops/` - Docker, Kubernetes, CI/CD, Git workflows
+- `specialized/` - Security audit, MCP builder, skills
+- `general/` - Full-stack, architecture, problem-solving
+
+### Creating New Skills
+1. Choose appropriate category
+2. Follow existing skill structure
+3. Include activation patterns (`when_to_use`)
+4. Provide actionable guidelines
+5. Add keywords for discovery
+
+## File Organization
+
+```
+hobo_code/
+├── server/          # ACP server (ReAct loop, tools)
+├── client/          # Textual TUI
+├── tools/           # Tool implementations
+└── skills/          # JSON skill definitions
+
+tests/
+├── server/
+├── client/
+└── tools/
+```
+
+## ACP Protocol Guidelines
+
+- Validate message schemas before processing
+- Handle protocol errors with proper error codes
+- Log protocol violations for debugging
+- Ensure bidirectional communication works
+
+## Formatting
+
+- 4 spaces (no tabs)
+- 100 character max line length
+- Use Black, isort
+- Trailing commas in multi-line constructs
+
+## Testing Requirements
+
+- Write tests using pytest with pytest-asyncio
+- Mock external dependencies
+- Follow AAA pattern (Arrange, Act, Assert)
+- Keep tests independent and fast
+
+## Security
+
+- Validate all inputs
+- Never execute unsanitized commands
+- Never commit secrets or API keys
+- Use parameterized queries

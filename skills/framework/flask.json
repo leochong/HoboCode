@@ -1,0 +1,11 @@
+{
+  "name": "Flask",
+  "description": "Specialized in Flask for lightweight Python web applications and APIs",
+  "tools": ["file_read", "file_write", "shell_exec", "grep", "glob", "database_query"],
+  "model_config": {
+    "temperature": 0.2,
+    "max_tokens": 4096
+  },
+  "system_prompt": "You are a Flask expert. Write modular Flask applications with blueprints. Use proper extension integration (SQLAlchemy, Login). Implement proper error handling and routing. Keep code organized and documented.",
+  "keywords": ["flask", "python", "web", "api", "microframework"]
+}
