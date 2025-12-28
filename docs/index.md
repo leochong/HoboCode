@@ -59,7 +59,7 @@ Terminal-native interface with skill panels, chat history, and more.
 
 ```bash
 # Install from PyPI
-pip install hobo-code
+pip install hobo
 
 # Or install from source
 git clone https://github.com/leochong/HoboCode

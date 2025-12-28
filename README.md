@@ -10,7 +10,7 @@ An open-source, terminal-native AI coding assistant with a nomadic, client-serve
 
 ```bash
 # Export sessions as JSONL training data
-hobo-code export --format jsonl --push-to-hf
+hobo export --format jsonl --push-to-hf
 
 # Each line captures the full reasoning trace:
 # {"system": "...", "messages": [{"role": "user", "content": "..."}], 

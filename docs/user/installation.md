@@ -9,7 +9,7 @@
 ## Install from PyPI
 
 ```bash
-pip install hobo-code
+pip install hobo
 ```
 
 ## Install from Source
