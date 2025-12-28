@@ -57,8 +57,14 @@ Terminal-native interface with skill panels, chat history, and more.
 
 ## Installation
 
+**Windows (recommended):**
 ```bash
-# Install from PyPI
+pip install pipx
+pipx install hobo
+```
+
+**Other platforms:**
+```bash
 pip install hobo
 
 # Or install from source

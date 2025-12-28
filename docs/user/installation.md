@@ -3,10 +3,20 @@
 ## Prerequisites
 
 - Python 3.10+
-- pip or poetry
+- pip or pipx
 - Terminal emulator
 
-## Install from PyPI
+## Install from PyPI (Recommended)
+
+On Windows, use pipx to automatically handle PATH and isolate the installation:
+
+```bash
+# Install pipx if you don't have it
+pip install pipx
+pipx install hobo
+```
+
+Or use pip directly (you may need to add Python Scripts to PATH manually):
 
 ```bash
 pip install hobo
@@ -27,26 +37,13 @@ hobo --version
 hobo --help
 ```
 
-## Configuration
+## Troubleshooting
 
-Hobo Code stores configuration in `~/.hobo-code/`:
+If `hobo` is not recognized after installation, your Python Scripts directory may not be in PATH. Add it:
 
-```
-~/.hobo-code/
-├── auto_switch.json   # Auto-switch preferences
-├── credentials.json   # API keys
-└── preferences.json   # User preferences
+```powershell
+# PowerShell
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";$env:LOCALAPPDATA\Packages\PythonSoftwareFoundation.Python.3.*\LocalCache\local-packages\Python*\Scripts", "User")
 ```
 
-## API Keys
-
-Set up your API keys for LLM providers:
-
-```bash
-hobo auth set anthropic <your-api-key>
-hobo auth set openai <your-api-key>
-```
-
----
-
-*Next: [Quick Start →](quickstart.md)*
+Then restart your terminal.
