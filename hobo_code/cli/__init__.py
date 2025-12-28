@@ -70,24 +70,6 @@ def chat(ctx: click.Context, args: tuple) -> None:
     from hobo_code.client.app import HoboApp
     from hobo_code.auth.credentials import CredentialStore
 
-    store = CredentialStore()
-    providers = store.list_providers()
-
-    if not providers:
-        click.echo("Welcome to Hobo Code!")
-        click.echo("-" * 40)
-        click.echo("No API keys configured. Let's set up your LLM provider.")
-        click.echo("")
-        click.echo("Available providers: openai, anthropic, google, deepseek, mistral, etc.")
-        provider = click.prompt("Enter provider name", type=str, default="openai")
-        api_key = click.prompt(f"Enter API key for {provider}", type=str, hide_input=True)
-
-        if store.save_key(provider, api_key):
-            click.echo(f"API key saved for {provider}")
-        else:
-            click.echo("Failed to save API key")
-            return
-
     start_server = ctx.obj.get("start_server", True)
 
     if start_server:
