@@ -65,7 +65,11 @@ class ChatInput(Input):
     SKILL_CLEAR_PATTERN = re.compile(r"^/skill\s+clear$")
     SKILL_INFO_PATTERN = re.compile(r"^/skill\s+info(?:\s+(\S+))?$")
 
-    def __init__(self, placeholder: str = "Type a message... (Enter to send, /skill <name> to activate)", **kwargs):
+    def __init__(
+        self,
+        placeholder: str = "Type a message... (Enter to send, /skill <name> to activate)",
+        **kwargs,
+    ):
         super().__init__(placeholder=placeholder, **kwargs)
         self.on_skill_command_callback = None
         self.on_regular_message_callback = None
@@ -118,12 +122,12 @@ class ChatInput(Input):
         if self.on_regular_message_callback:
             await self.on_regular_message_callback(value)
         else:
-            await self.post_message_no_wait(self.Submitted(value))
+            await self.post_message_no_wait(self.Submitted(self, value, None))
         self.value = ""
 
     class Submitted(Input.Submitted):
         """Event emitted when Enter is pressed."""
 
-        def __init__(self, value: str):
-            super().__init__()
+        def __init__(self, input_widget: Input, value: str, validation_result):
+            super().__init__(input_widget, value, validation_result)
             self.value = value

@@ -79,7 +79,10 @@ class HoboApp(App):
                     yield MessageList(id="message-list")
                 with Container(id="input-area"):
                     yield SkillIndicator(id="skill-indicator")
-                    yield ChatInput(id="chat-input", placeholder="Type a message... (Enter to send, /skill <name> to activate)")
+                    yield ChatInput(
+                        id="chat-input",
+                        placeholder="Type a message... (Enter to send, /skill <name> to activate)",
+                    )
             yield SkillPanel(id="skills-panel")
 
         yield Footer()
@@ -122,8 +125,7 @@ class HoboApp(App):
 
         message_list = self.query_one("#message-list", MessageList)
         message_list.add_message(
-            "system",
-            f"[Auto] Switched to {event.new_skill} ({event.confidence:.0%} confidence)"
+            "system", f"[Auto] Switched to {event.new_skill} ({event.confidence:.0%} confidence)"
         )
 
     def _show_switch_notification(
@@ -179,9 +181,14 @@ class HoboApp(App):
                     self.refresh_skills_panel()
                     if self.current_session:
                         self.current_session.model = skill_name
-                    message_list.add_message("assistant", f"Skill '{skill_name}' activated (manual). {skill.description}")
+                    message_list.add_message(
+                        "assistant", f"Skill '{skill_name}' activated (manual). {skill.description}"
+                    )
                 else:
-                    message_list.add_message("assistant", f"Skill '{skill_name}' not found. Use /skill list to see available skills.")
+                    message_list.add_message(
+                        "assistant",
+                        f"Skill '{skill_name}' not found. Use /skill list to see available skills.",
+                    )
 
         elif command == "info":
             skill_name = argument or self.active_skill
@@ -196,7 +203,9 @@ class HoboApp(App):
                 else:
                     message_list.add_message("assistant", f"Skill '{skill_name}' not found.")
             else:
-                message_list.add_message("assistant", "No skill active. Use /skill <name> to activate a skill first.")
+                message_list.add_message(
+                    "assistant", "No skill active. Use /skill <name> to activate a skill first."
+                )
 
     async def handle_skill_panel_select(self, skill_name: str) -> None:
         """Handle skill selection from the panel."""
@@ -212,7 +221,9 @@ class HoboApp(App):
         message_list = self.query_one("#message-list", MessageList)
 
         if skill:
-            message_list.add_message("assistant", f"Skill '{skill_name}' activated (manual). {skill.description}")
+            message_list.add_message(
+                "assistant", f"Skill '{skill_name}' activated (manual). {skill.description}"
+            )
 
     async def handle_regular_message(self, message: str) -> None:
         """Handle regular chat messages."""
@@ -236,7 +247,7 @@ class HoboApp(App):
 
     async def process_assistant_response(self, user_message: str) -> None:
         """Process user message and generate assistant response."""
-        await asyncio.sleep(0.5)
+        message_list = self.query_one("#message-list", MessageList)
 
         system_prompt = ""
         if self.active_skill:
@@ -249,18 +260,35 @@ class HoboApp(App):
                     system_prompt = skill.system_prompt[:200] + "..."
 
         mode_indicator = "[Auto] " if self.auto_mode else ""
-        assistant_response = f"I received: {user_message}"
 
-        if self.active_skill:
-            assistant_response += f"\n\n{mode_indicator}(Skill active: {self.active_skill})"
-        assistant_response += "\n\nThis is a placeholder response. In production, this would connect to the ACP server."
+        assistant_response = f"""I received: {user_message}
 
-        message_list = self.query_one("#message-list", MessageList)
+{mode_indicator}(Skill active: {self.active_skill or "none"})
+
+**To get real AI responses:**
+
+1. Start the ACP server in a separate terminal:
+   ```
+   hobo serve
+   ```
+
+2. Then open a new terminal and run:
+   ```
+   hobo chat
+   ```
+
+**Or configure an API key and use direct mode:**
+   ```
+   hobo auth
+   ```
+"""
         message_list.add_message("assistant", assistant_response)
 
         if self.current_session:
             self.session_manager.add_message(self.current_session.id, "user", user_message)
-            self.session_manager.add_message(self.current_session.id, "assistant", assistant_response)
+            self.session_manager.add_message(
+                self.current_session.id, "assistant", assistant_response
+            )
 
     def action_clear(self) -> None:
         """Clear the chat."""

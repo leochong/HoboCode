@@ -2,23 +2,30 @@
 
 import asyncio
 import click
+import threading
+import time
+from hobo_code.server.acp import ACPServer
 
 
-@click.group()
-def cli():
-    """Hobo Code - Terminal-native AI coding assistant."""
-    pass
+def _check_credentials() -> bool:
+    """Check if API credentials are configured."""
+    try:
+        from hobo_code.auth.credentials import CredentialStore
+
+        store = CredentialStore()
+        providers = store.list_providers()
+        return len(providers) > 0
+    except Exception:
+        return False
 
 
-@cli.command()
-@click.option("--host", default="127.0.0.1", help="Host to bind to")
-@click.option("--port", default=8765, type=int, help="Port to listen on")
-def acp(host: str, port: int) -> None:
-    """Start the ACP server for client connections."""
-    from hobo_code.server.acp import ACPServer
+def _start_embedded_server(
+    host: str = "127.0.0.1", port: int = 8765
+) -> tuple[threading.Thread, int]:
+    """Start the ACP server in a background thread and return (thread, port)."""
+    server = ACPServer(host=host, port=port)
 
     async def run_server():
-        server = ACPServer(host=host, port=port)
         await server.start()
         try:
             while True:
@@ -26,22 +33,56 @@ def acp(host: str, port: int) -> None:
         except KeyboardInterrupt:
             await server.stop()
 
-    asyncio.run(run_server())
+    thread = threading.Thread(target=lambda: asyncio.run(run_server()), daemon=True)
+    thread.start()
+    time.sleep(0.5)  # Give server time to start
+    return thread, port
 
 
-@cli.command()
-@click.option("--host", default="127.0.0.1", help="Host to bind to")
-@click.option("--port", default=8766, type=int, help="Port for headless API server")
-def serve(host: str, port: int) -> None:
-    """Start headless server mode for API access."""
-    click.echo(f"Starting headless server on {host}:{port}")
-    click.echo("Headless mode not yet implemented - coming in Phase 1")
+@click.group(invoke_without_command=True)
+@click.option("--server", is_flag=True, help="Start with embedded server (default)")
+@click.option("--no-server", is_flag=True, help="Start without embedded server")
+@click.pass_context
+def cli(ctx: click.Context, server: bool, no_server: bool) -> None:
+    """Hobo Code - Terminal-native AI coding assistant."""
+    ctx.ensure_object(dict)
+    ctx.obj["start_server"] = not no_server and not server
+
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(chat)
 
 
-@cli.command()
-def chat() -> None:
+@cli.command(context_settings={"ignore_unknown_options": True})
+@click.argument("args", nargs=-1, type=click.UNPROCESSED)
+@click.pass_context
+def chat(ctx: click.Context, args: tuple) -> None:
     """Launch the interactive TUI chat interface."""
     from hobo_code.client.app import HoboApp
+    from hobo_code.auth.credentials import CredentialStore
+
+    store = CredentialStore()
+    providers = store.list_providers()
+
+    if not providers:
+        click.echo("Welcome to Hobo Code!")
+        click.echo("-" * 40)
+        click.echo("No API keys configured. Let's set up your LLM provider.")
+        click.echo("")
+        click.echo("Available providers: openai, anthropic, google, deepseek, mistral, etc.")
+        provider = click.prompt("Enter provider name", type=str, default="openai")
+        api_key = click.prompt(f"Enter API key for {provider}", type=str, hide_input=True)
+
+        if store.save_key(provider, api_key):
+            click.echo(f"API key saved for {provider}")
+        else:
+            click.echo("Failed to save API key")
+            return
+
+    start_server = ctx.obj.get("start_server", True)
+
+    if start_server:
+        click.echo("Starting embedded server...")
+        _start_embedded_server()
 
     app = HoboApp()
     app.run()
@@ -244,7 +285,7 @@ def config_auto_switch(state: str) -> None:
     from hobo_code.auth.preferences import UserPreferences
 
     prefs = UserPreferences()
-    prefs.auto_switch_enabled = (state == "on")
+    prefs.auto_switch_enabled = state == "on"
     click.echo(f"Auto-switch {'enabled' if prefs.auto_switch_enabled else 'disabled'}")
 
 
@@ -356,7 +397,9 @@ def skills_add(skill_name: str, repo: str) -> None:
     skills_dir = project_dir / "skills"
 
     if not skills_dir.exists():
-        click.echo("Error: No skills directory found. Run 'hobo init' first or run from project directory.")
+        click.echo(
+            "Error: No skills directory found. Run 'hobo init' first or run from project directory."
+        )
         return
 
     discovery = SkillDiscovery()
@@ -383,7 +426,9 @@ def skills_sync(repo: str) -> None:
     skills_dir = project_dir / "skills"
 
     if not skills_dir.exists():
-        click.echo("Error: No skills directory found. Run 'hobo init' first or run from project directory.")
+        click.echo(
+            "Error: No skills directory found. Run 'hobo init' first or run from project directory."
+        )
         return
 
     discovery = SkillDiscovery()
@@ -466,7 +511,7 @@ def skills_classify(message: str, llm: bool) -> None:
     from hobo_code.skills.classifier import SkillClassifier
     from hobo_code.skills.detection import SkillDetectionEngine
 
-    click.echo(f"Classifying: \"{message}\"")
+    click.echo(f'Classifying: "{message}"')
     click.echo("-" * 50)
 
     if llm:
@@ -477,9 +522,9 @@ def skills_classify(message: str, llm: bool) -> None:
         click.echo(f"Skill: {result.get('skill') or '(none)'}")
         click.echo(f"Confidence: {result.get('confidence', 0):.2%}")
 
-        if result.get('intent'):
+        if result.get("intent"):
             click.echo(f"Intent: {result['intent']}")
-        if result.get('reasoning'):
+        if result.get("reasoning"):
             click.echo(f"Reasoning: {result['reasoning']}")
     else:
         engine = SkillDetectionEngine()
@@ -501,7 +546,7 @@ def skills_detect(message: str, top: int) -> None:
     from hobo_code.skills.classifier import SkillClassifier
     from hobo_code.skills.detection import SkillDetectionEngine
 
-    click.echo(f"Detecting skills for: \"{message}\"")
+    click.echo(f'Detecting skills for: "{message}"')
     click.echo("=" * 50)
 
     engine = SkillDetectionEngine()
@@ -520,7 +565,7 @@ def skills_detect(message: str, top: int) -> None:
     click.echo("\nLLM Classification:")
     if llm_recommendations:
         for rec in llm_recommendations:
-            method = rec.get('method', 'unknown')
+            method = rec.get("method", "unknown")
             click.echo(f"  - {rec['skill']}: {rec['confidence']:.2%} ({method})")
     else:
         click.echo("  No LLM recommendations (API not configured)")
@@ -822,7 +867,7 @@ def export_stats() -> None:
     click.echo("Export Statistics")
     click.echo("-" * 40)
     click.echo(f"Total training examples: {stats['total_examples']}")
-    click.echo(f"Success rate: {stats['success_rate']*100:.1f}%")
+    click.echo(f"Success rate: {stats['success_rate'] * 100:.1f}%")
     click.echo(f"Avg input tokens: {stats['avg_tokens_input']}")
     click.echo(f"Avg output tokens: {stats['avg_tokens_output']}")
     click.echo(f"Task types: {', '.join(stats['task_types'].keys())}")
@@ -852,8 +897,9 @@ def export_dry_run(sample: int) -> None:
     click.echo(f"Preview ({min(sample, len(all_lines))} examples):")
     for i, line in enumerate(all_lines[:sample]):
         import json
+
         data = json.loads(line)
-        click.echo(f"\n--- Example {i+1} ---")
+        click.echo(f"\n--- Example {i + 1} ---")
         click.echo(f"Task: {data.get('task', 'unknown')}")
         click.echo(f"Skill: {data.get('skill', 'none')}")
         click.echo(f"Messages: {len(data.get('messages', []))}")
@@ -861,7 +907,9 @@ def export_dry_run(sample: int) -> None:
 
 
 @export.command("sample")
-@click.option("--output", "-o", type=str, default="data/sample_export.jsonl", help="Output file path")
+@click.option(
+    "--output", "-o", type=str, default="data/sample_export.jsonl", help="Output file path"
+)
 def export_sample(output: str) -> None:
     """Create a sample JSONL export file."""
     from hobo_code.export.formatter import JSONLFormatter
@@ -915,8 +963,12 @@ def donate(dataset: str, private: bool, token: str | None) -> None:
 @cli.command()
 @click.argument("project_name", type=str)
 @click.argument("description", type=str, required=False)
-@click.option("--path", "-p", type=str, default=None, help="Project path (default: current directory)")
-@click.option("--github-token", "-t", type=str, default=None, help="GitHub token for skill downloads")
+@click.option(
+    "--path", "-p", type=str, default=None, help="Project path (default: current directory)"
+)
+@click.option(
+    "--github-token", "-t", type=str, default=None, help="GitHub token for skill downloads"
+)
 def init(project_name: str, description: str, path: str | None, github_token: str | None) -> None:
     """Initialize a new Hobo Code project with default skills."""
     from hobo_code.skills.init import init_project
