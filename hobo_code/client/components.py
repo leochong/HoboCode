@@ -89,14 +89,24 @@ class ChatInput(Input):
 
     async def on_submit(self) -> None:
         """Handle Enter key submission."""
+        import sys
+
         value = self.value.strip()
+        print(f"\n[DEBUG-CMP] ChatInput.on_submit called: '{value}'", file=sys.stderr, flush=True)
         if not value:
+            print("[DEBUG-CMP] Empty value, returning", file=sys.stderr, flush=True)
             return
 
         skill_match = self.SKILL_PATTERN.match(value)
         skill_list_match = self.SKILL_LIST_PATTERN.match(value)
         skill_clear_match = self.SKILL_CLEAR_PATTERN.match(value)
         skill_info_match = self.SKILL_INFO_PATTERN.match(value)
+
+        print(
+            f"[DEBUG-CMP] skill_match={skill_match is not None}, list={skill_list_match is not None}",
+            file=sys.stderr,
+            flush=True,
+        )
 
         if skill_list_match:
             if self.on_skill_command_callback:
@@ -124,6 +134,11 @@ class ChatInput(Input):
             self.value = ""
             return
 
+        print(
+            f"[DEBUG-CMP] on_regular_message_callback = {self.on_regular_message_callback}",
+            file=sys.stderr,
+            flush=True,
+        )
         if self.on_regular_message_callback:
             await self.on_regular_message_callback(value)
         else:
