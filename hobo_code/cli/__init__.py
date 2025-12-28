@@ -216,6 +216,90 @@ def models_info(model: str) -> None:
 
 
 @cli.group()
+def config() -> None:
+    """Manage user configuration."""
+    pass
+
+
+@config.command("show")
+def config_show() -> None:
+    """Show current configuration."""
+    from hobo_code.auth.preferences import UserPreferences
+
+    prefs = UserPreferences()
+    click.echo("Hobo Code Configuration")
+    click.echo("-" * 40)
+    click.echo("Auto-Switch:")
+    click.echo(f"  enabled: {prefs.auto_switch_enabled}")
+    click.echo(f"  min_confidence: {prefs.min_confidence}")
+    click.echo(f"  debounce_seconds: {prefs.debounce_seconds}")
+    click.echo(f"  show_notifications: {prefs.show_notifications}")
+    click.echo(f"  locked_skill: {prefs.locked_skill or '(none)'}")
+
+
+@config.command("auto-switch")
+@click.argument("state", type=click.Choice(["on", "off"]))
+def config_auto_switch(state: str) -> None:
+    """Enable or disable auto-switching of skills."""
+    from hobo_code.auth.preferences import UserPreferences
+
+    prefs = UserPreferences()
+    prefs.auto_switch_enabled = (state == "on")
+    click.echo(f"Auto-switch {'enabled' if prefs.auto_switch_enabled else 'disabled'}")
+
+
+@config.command("min-confidence")
+@click.argument("value", type=float)
+def config_min_confidence(value: float) -> None:
+    """Set minimum confidence threshold for auto-switching (0.0-1.0)."""
+    if not 0.0 <= value <= 1.0:
+        click.echo("Error: value must be between 0.0 and 1.0")
+        return
+
+    from hobo_code.auth.preferences import UserPreferences
+
+    prefs = UserPreferences()
+    prefs.min_confidence = value
+    click.echo(f"Minimum confidence set to {value:.2f}")
+
+
+@config.command("lock")
+@click.argument("skill_name", type=str, required=False)
+def config_lock(skill_name: str | None) -> None:
+    """Lock skill to prevent auto-switching. Omit skill name to unlock."""
+    from hobo_code.auth.preferences import UserPreferences
+    from hobo_code.skills.registry import SkillRegistry
+
+    prefs = UserPreferences()
+    if skill_name:
+        registry = SkillRegistry()
+        skill = registry.get_skill(skill_name)
+        if skill:
+            prefs.locked_skill = skill_name
+            click.echo(f"Skill locked to '{skill_name}'")
+        else:
+            click.echo(f"Skill '{skill_name}' not found")
+    else:
+        prefs.locked_skill = None
+        click.echo("Skill unlocked")
+
+
+@config.command("debounce")
+@click.argument("seconds", type=float)
+def config_debounce(seconds: float) -> None:
+    """Set debounce time in seconds (minimum 0.5)."""
+    from hobo_code.auth.preferences import UserPreferences
+
+    if seconds < 0.5:
+        click.echo("Error: debounce must be at least 0.5 seconds")
+        return
+
+    prefs = UserPreferences()
+    prefs.debounce_seconds = seconds
+    click.echo(f"Debounce time set to {seconds} seconds")
+
+
+@cli.group()
 def skills() -> None:
     """Manage AI skills."""
     pass
@@ -257,6 +341,118 @@ def skills_recommend(task: str) -> None:
     click.echo(f"Skills matching '{task}':")
     for skill, score in recommendations[:5]:
         click.echo(f"  - {skill.name}: {score:.2f}")
+
+
+@skills.command("add")
+@click.argument("skill_name", type=str)
+@click.option("--repo", default="leochong/HoboCode", help="GitHub repository (owner/repo)")
+def skills_add(skill_name: str, repo: str) -> None:
+    """Add a skill from a GitHub repository."""
+    from hobo_code.skills.discovery import SkillDiscovery
+    from hobo_code.skills.registry import SkillRegistry
+    from pathlib import Path
+
+    project_dir = Path.cwd()
+    skills_dir = project_dir / "skills"
+
+    if not skills_dir.exists():
+        click.echo("Error: No skills directory found. Run 'hobo init' first or run from project directory.")
+        return
+
+    discovery = SkillDiscovery()
+    skill_path = discovery.find_skill(skill_name, skills_dir, repo)
+
+    if skill_path and skill_path.exists():
+        registry = SkillRegistry(project_dir=str(project_dir))
+        if registry.add_skill(skill_path):
+            click.echo(f"Skill '{skill_name}' added successfully.")
+        else:
+            click.echo(f"Failed to add skill '{skill_name}'.")
+    else:
+        click.echo(f"Skill '{skill_name}' not found in {repo}")
+
+
+@skills.command("sync")
+@click.option("--repo", default="leochong/HoboCode", help="GitHub repository (owner/repo)")
+def skills_sync(repo: str) -> None:
+    """Sync all available skills from a GitHub repository."""
+    from hobo_code.skills.discovery import SkillDiscovery
+    from pathlib import Path
+
+    project_dir = Path.cwd()
+    skills_dir = project_dir / "skills"
+
+    if not skills_dir.exists():
+        click.echo("Error: No skills directory found. Run 'hobo init' first or run from project directory.")
+        return
+
+    discovery = SkillDiscovery()
+    all_skills = discovery.list_all_available_skills(repo)
+
+    if not all_skills:
+        click.echo(f"No skills found in {repo}")
+        return
+
+    click.echo(f"Available skills in {repo}:")
+    for skill in all_skills:
+        name = skill.get("name", "")
+        source_type = skill.get("source_type", "")
+        click.echo(f"  - {name} ({source_type})")
+
+    click.echo(f"\nTotal: {len(all_skills)} skills")
+
+
+@skills.command("search")
+@click.argument("query", type=str)
+@click.option("--repo", default="leochong/HoboCode", help="GitHub repository (owner/repo)")
+def skills_search(query: str, repo: str) -> None:
+    """Search for skills matching a query."""
+    from hobo_code.skills.discovery import SkillDiscovery
+
+    discovery = SkillDiscovery()
+    results = discovery.search_skills(query, repo)
+
+    if not results:
+        click.echo(f"No skills matching '{query}' found.")
+        return
+
+    click.echo(f"Skills matching '{query}':")
+    for skill in results[:20]:
+        name = skill.get("name", "")
+        source = skill.get("source", "")
+        source_type = skill.get("source_type", "")
+        click.echo(f"  - {name} ({source_type}: {source})")
+
+    if len(results) > 20:
+        click.echo(f"  ... and {len(results) - 20} more")
+
+
+@skills.command("info")
+@click.argument("skill_name", type=str)
+def skills_info(skill_name: str) -> None:
+    """Show detailed information about a skill."""
+    from hobo_code.skills.registry import SkillRegistry
+
+    registry = SkillRegistry()
+    skill = registry.get_skill(skill_name)
+
+    if not skill:
+        click.echo(f"Skill '{skill_name}' not found.")
+        return
+
+    click.echo(f"Skill: {skill.name}")
+    click.echo(f"Description: {skill.description}")
+
+    if skill.keywords:
+        click.echo(f"Keywords: {', '.join(skill.keywords)}")
+
+    if skill.when_to_use:
+        click.echo("When to use:")
+        for item in skill.when_to_use:
+            click.echo(f"  - {item}")
+
+    if skill.tools:
+        click.echo(f"Tools: {', '.join(skill.tools)}")
 
 
 @cli.group()
@@ -643,6 +839,28 @@ def donate(dataset: str, private: bool, token: str | None) -> None:
         click.echo(f"Successfully pushed to {result['url']}")
     else:
         click.echo(f"Failed to push: {result.get('error')}")
+
+
+@cli.command()
+@click.argument("project_name", type=str)
+@click.argument("description", type=str, required=False)
+@click.option("--path", "-p", type=str, default=None, help="Project path (default: current directory)")
+@click.option("--github-token", "-t", type=str, default=None, help="GitHub token for skill downloads")
+def init(project_name: str, description: str, path: str | None, github_token: str | None) -> None:
+    """Initialize a new Hobo Code project with default skills."""
+    from hobo_code.skills.init import init_project
+    from pathlib import Path
+
+    base_path = Path(path) if path else Path.cwd()
+    result = init_project(project_name, base_path, description or "", github_token)
+
+    click.echo(f"Project created at: {result['project_path']}")
+    click.echo(f"Skills directory: {result['skills_dir']}")
+    click.echo(f"Downloaded skills: {', '.join(result['downloaded_skills'])}")
+    click.echo("\nNext steps:")
+    click.echo("  1. cd into the project directory")
+    click.echo("  2. Add more skills: hobo skills add <skill-name>")
+    click.echo("  3. Start coding: hobo chat")
 
 
 def main():

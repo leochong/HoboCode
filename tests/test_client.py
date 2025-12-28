@@ -65,6 +65,7 @@ class TestChatInput:
         assert chat_input.placeholder == "Type here..."
 
     def test_input_creation_default_placeholder(self):
-        """Test default placeholder."""
+        """Test default placeholder includes skill command hint."""
         chat_input = ChatInput()
-        assert chat_input.placeholder == "Type a message..."
+        assert "Type a message..." in chat_input.placeholder
+        assert "/skill" in chat_input.placeholder

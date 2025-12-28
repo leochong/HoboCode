@@ -250,6 +250,14 @@ class ACPServer:
         handlers = {
             "ping": self._handle_ping,
             "echo": self._handle_echo,
+            "skills.list": self._handle_skills_list,
+            "skills.get": self._handle_skills_get,
+            "skills.search": self._handle_skills_search,
+            "skills.recommend": self._handle_skills_recommend,
+            "skills.add": self._handle_skills_add,
+            "session.create": self._handle_session_create,
+            "session.send": self._handle_session_send,
+            "session.history": self._handle_session_history,
         }
 
         handler = handlers.get(method)
@@ -273,6 +281,191 @@ class ACPServer:
         session_id: str,
     ) -> ACPResponse:
         return ACPResponse.success(request_id, {"echo": params.get("message", "")})
+
+    async def _handle_skills_list(
+        self,
+        request_id: str,
+        params: dict[str, Any],
+        session_id: str,
+    ) -> ACPResponse:
+        from hobo_code.skills.registry import SkillRegistry
+
+        registry = SkillRegistry()
+        skills = registry.list_skills()
+        skill_list = []
+        for s in skills:
+            skill = registry.get_skill(s)
+            if skill:
+                skill_list.append({
+                    "name": skill.name,
+                    "description": skill.description,
+                    "keywords": skill.keywords,
+                })
+        return ACPResponse.success(request_id, {"skills": skill_list})
+
+    async def _handle_skills_get(
+        self,
+        request_id: str,
+        params: dict[str, Any],
+        session_id: str,
+    ) -> ACPResponse:
+        from hobo_code.skills.registry import SkillRegistry
+
+        skill_name = params.get("name")
+        if not skill_name:
+            return ACPResponse.err(request_id, "Skill name is required")
+
+        registry = SkillRegistry()
+        skill = registry.get_skill(skill_name)
+
+        if not skill:
+            return ACPResponse.err(request_id, f"Skill '{skill_name}' not found")
+
+        return ACPResponse.success(request_id, {"skill": skill.to_dict()})
+
+    async def _handle_skills_search(
+        self,
+        request_id: str,
+        params: dict[str, Any],
+        session_id: str,
+    ) -> ACPResponse:
+        from hobo_code.skills.discovery import SkillDiscovery
+
+        query = params.get("query", "")
+        repo = params.get("repo", "leochong/HoboCode")
+
+        discovery = SkillDiscovery()
+        results = discovery.search_skills(query, repo)
+
+        return ACPResponse.success(request_id, {"results": results})
+
+    async def _handle_skills_recommend(
+        self,
+        request_id: str,
+        params: dict[str, Any],
+        session_id: str,
+    ) -> ACPResponse:
+        from hobo_code.skills.registry import SkillRegistry
+
+        task = params.get("task", "")
+        if not task:
+            return ACPResponse.err(request_id, "Task description is required")
+
+        registry = SkillRegistry()
+        recommendations = registry.get_recommended_skills(task)
+
+        result = [{"name": s.name, "score": score} for s, score in recommendations[:5]]
+        return ACPResponse.success(request_id, {"recommendations": result})
+
+    async def _handle_skills_add(
+        self,
+        request_id: str,
+        params: dict[str, Any],
+        session_id: str,
+    ) -> ACPResponse:
+        from hobo_code.skills.discovery import SkillDiscovery
+        from hobo_code.skills.registry import SkillRegistry
+        from pathlib import Path
+
+        skill_name = params.get("name")
+        if not skill_name:
+            return ACPResponse.err(request_id, "Skill name is required")
+
+        repo = params.get("repo", "leochong/HoboCode")
+        project_dir = params.get("project_dir", str(Path.cwd()))
+
+        discovery = SkillDiscovery()
+        skills_dir = Path(project_dir) / "skills"
+
+        skill_path = discovery.find_skill(skill_name, skills_dir, repo)
+
+        if skill_path and skill_path.exists():
+            registry = SkillRegistry(project_dir=project_dir)
+            if registry.add_skill(skill_path):
+                return ACPResponse.success(request_id, {"message": f"Skill '{skill_name}' added"})
+            return ACPResponse.err(request_id, f"Failed to add skill '{skill_name}'")
+
+        return ACPResponse.err(request_id, f"Skill '{skill_name}' not found in {repo}")
+
+    async def _handle_session_create(
+        self,
+        request_id: str,
+        params: dict[str, Any],
+        session_id: str,
+    ) -> ACPResponse:
+        from hobo_code.session.manager import SessionManager
+        from hobo_code.skills.registry import SkillRegistry
+
+        title = params.get("title", "New Session")
+        skill = params.get("skill")
+
+        registry = SkillRegistry()
+        system_prompt = registry.get_system_prompt(skill)
+
+        manager = SessionManager()
+        session = manager.create_session(
+            title=title,
+            system_prompt=system_prompt,
+            model=skill,
+        )
+
+        return ACPResponse.success(request_id, {"session_id": session.id})
+
+    async def _handle_session_send(
+        self,
+        request_id: str,
+        params: dict[str, Any],
+        session_id: str,
+    ) -> ACPResponse:
+        from hobo_code.session.manager import SessionManager
+        from hobo_code.skills.registry import SkillRegistry
+
+        session_id_param = params.get("session_id")
+        message = params.get("message")
+
+        if not session_id_param or not message:
+            return ACPResponse.err(request_id, "session_id and message are required")
+
+        manager = SessionManager()
+        session = manager.get_session(session_id_param)
+
+        if not session:
+            return ACPResponse.err(request_id, "Session not found")
+
+        registry = SkillRegistry()
+        skill = registry.get_skill(session.model)
+        system_prompt = registry.get_system_prompt(session.model) if skill else None
+
+        response = manager.add_message(session_id_param, message, system_prompt)
+
+        return ACPResponse.success(request_id, {"response": response})
+
+    async def _handle_session_history(
+        self,
+        request_id: str,
+        params: dict[str, Any],
+        session_id: str,
+    ) -> ACPResponse:
+        from hobo_code.session.manager import SessionManager
+
+        session_id_param = params.get("session_id")
+        if not session_id_param:
+            return ACPResponse.err(request_id, "session_id is required")
+
+        manager = SessionManager()
+        session = manager.get_session(session_id_param)
+
+        if not session:
+            return ACPResponse.err(request_id, "Session not found")
+
+        return ACPResponse.success(request_id, {
+            "session": {
+                "id": session.id,
+                "title": session.title,
+                "model": session.model,
+                "messages": len(session.messages),
+            }
+        })
 
     def get_session_stats(self) -> dict[str, Any]:
         """Get server session statistics."""
