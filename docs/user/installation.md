@@ -33,13 +33,39 @@ pip install -e ".[dev]"
 ## Verify Installation
 
 ```bash
-hobo --version
 hobo --help
 ```
 
+You should see the list of available commands. If `hobo` is not found, see Troubleshooting below.
+
 ## Troubleshooting
 
-If `hobo` is not recognized after installation, your Python Scripts directory may not be in PATH. Add it:
+### "No module named 'hobo_code'" error
+
+If you get `ModuleNotFoundError: No module named 'hobo_code'` after installation:
+
+1. **Force reinstall with pipx:**
+   ```bash
+   pipx uninstall hobo
+   pipx install hobo
+   ```
+
+2. **Or force reinstall from source:**
+   ```bash
+   pipx uninstall hobo
+   pipx install -e /path/to/HoboCode --force
+   ```
+
+3. **If pipx metadata is corrupted:**
+   ```bash
+   # Manually remove the venv and reinstall
+   rm -rf %LOCALAPPDATA%\pipx\venvs\hobo-code
+   pipx install hobo
+   ```
+
+### "hobo is not recognized"
+
+Your Python Scripts directory may not be in PATH. Add it:
 
 ```powershell
 # PowerShell
