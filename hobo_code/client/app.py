@@ -261,13 +261,20 @@ class HoboApp(App):
 
     async def process_assistant_response(self, user_message: str) -> None:
         """Process user message and generate assistant response via ACP server."""
+        import sys
+
+        print(f"\n[DEBUG] process_assistant_response called", file=sys.stderr, flush=True)
+
         import asyncio
         import json
 
         message_list = self.query_one("#message-list", MessageList)
+        print(f"[DEBUG] Got message_list widget", file=sys.stderr, flush=True)
 
         try:
+            print(f"[DEBUG] Connecting to ACP server...", file=sys.stderr, flush=True)
             reader, writer = await asyncio.open_connection("127.0.0.1", 8765)
+            print(f"[DEBUG] Connected!", file=sys.stderr, flush=True)
 
             request = {
                 "type": "request",
@@ -282,15 +289,29 @@ class HoboApp(App):
                     "context": {},
                 },
             }
+            print(
+                f"[DEBUG] Sending request: {request['payload']['method']}",
+                file=sys.stderr,
+                flush=True,
+            )
 
             writer.write(json.dumps(request).encode())
             await writer.drain()
+            print(f"[DEBUG] Request sent, waiting for response...", file=sys.stderr, flush=True)
 
-            response_data = await reader.read(65536)
+            response_data = await asyncio.wait_for(reader.read(65536), timeout=30)
+            print(f"[DEBUG] Received {len(response_data)} bytes", file=sys.stderr, flush=True)
+
             writer.close()
             await writer.wait_closed()
 
             response = json.loads(response_data.decode())
+            print(
+                f"[DEBUG] Response status: {response.get('payload', {}).get('status')}",
+                file=sys.stderr,
+                flush=True,
+            )
+
             payload = response.get("payload", {})
             status = payload.get("status")
 
@@ -301,8 +322,18 @@ class HoboApp(App):
 
         except ConnectionRefusedError:
             assistant_response = "Error: Could not connect to ACP server. Make sure the server is running with 'hobo --server'"
+            print(f"[DEBUG] Connection refused", file=sys.stderr, flush=True)
+        except asyncio.TimeoutError:
+            assistant_response = "Error: Request timed out"
+            print(f"[DEBUG] Timeout", file=sys.stderr, flush=True)
         except Exception as e:
+            import traceback
+
             assistant_response = f"Error: {str(e)}"
+            print(f"[DEBUG] Exception: {e}", file=sys.stderr, flush=True)
+            traceback.print_exc()
+
+        print(f"[DEBUG] Adding assistant response to message list", file=sys.stderr, flush=True)
 
         mode_indicator = "[Auto] " if self.auto_mode else ""
         assistant_response = (
@@ -310,6 +341,7 @@ class HoboApp(App):
         )
 
         message_list.add_message("assistant", assistant_response)
+        print(f"[DEBUG] Added assistant message", file=sys.stderr, flush=True)
 
         if self.current_session:
             self.session_manager.add_message(self.current_session.id, "user", user_message)
