@@ -129,6 +129,21 @@ tests/
 
 ## Documentation
 
+### User Guide
+- [Installation](docs/user/installation.md) - Setup and configuration
+- [Quickstart](docs/user/quickstart.md) - 5-minute getting started guide
+- [Skills](docs/user/skills.md) - Using the skills system
+- [Auto-Switch](docs/user/auto-switch.md) - Automatic skill detection
+- [Commands](docs/user/commands.md) - Complete CLI command reference
+- [Configuration](docs/user/configuration.md) - Customizing Hobo Code
+- [TUI](docs/user/tui.md) - Terminal interface guide
+
+### API & Development
+- [API Reference](docs/api/README.md) - Python API documentation
+- [Contributing](docs/community/contributing.md) - Developer guide
+- [Architecture](docs/community/architecture.md) - System architecture overview
+
+### Other
 - [Project Plan](HOBO_CODE_PROJECT_PLAN.md) - Detailed roadmap
 - [AGENTS.md](AGENTS.md) - Guidelines for AI agents
 - [CLAUDE.md](CLAUDE.md) - Claude Code specific guidance
